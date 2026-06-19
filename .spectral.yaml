@@ -1,0 +1,3 @@
+# Ruleset do Spectral para lint do contrato OpenAPI (api/openapi.yaml).
+# Estende o ruleset oficial de OpenAPI.
+extends: ["spectral:oas"]

@@ -13,6 +13,7 @@ on:
       - Dockerfile
       - api/openapi.yaml
       - oapi-codegen.yaml
+      - .spectral.yaml
       - .github/workflows/app-ci.yaml
   pull_request:
     paths:
@@ -22,6 +23,7 @@ on:
       - Dockerfile
       - api/openapi.yaml
       - oapi-codegen.yaml
+      - .spectral.yaml
       - .github/workflows/app-ci.yaml
 
 env:
@@ -49,6 +51,9 @@ jobs:
 
       - name: go vet
         run: go vet ./...
+
+      - name: Lint OpenAPI contract
+        run: npx --yes @stoplight/spectral-cli lint api/openapi.yaml
 
       - name: Verify generated code is up to date
         run: |
