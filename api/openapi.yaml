@@ -1,0 +1,149 @@
+openapi: 3.0.3
+info:
+  title: Foxbit Calc API
+  description: |
+    API REST que executa as quatro operações básicas da matemática
+    (adição, subtração, multiplicação e divisão).
+
+    Cada operação aceita dois termos (`term_one`, `term_two`) e um parâmetro
+    opcional de precisão (`precision`). Sem `precision`, o resultado é truncado
+    para inteiro (sem arredondamento). Com `precision=n`, o resultado é truncado
+    para `n` casas decimais.
+  version: 1.0.0
+servers:
+  - url: /
+    description: Aplicação (porta 8000)
+
+paths:
+  /api/sum:
+    get:
+      operationId: sum
+      summary: Adição (term_one + term_two)
+      tags: [calculator]
+      parameters:
+        - $ref: '#/components/parameters/TermOne'
+        - $ref: '#/components/parameters/TermTwo'
+        - $ref: '#/components/parameters/Precision'
+      responses:
+        '200':
+          $ref: '#/components/responses/CalculationResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/sub:
+    get:
+      operationId: subtract
+      summary: Subtração (term_one - term_two)
+      tags: [calculator]
+      parameters:
+        - $ref: '#/components/parameters/TermOne'
+        - $ref: '#/components/parameters/TermTwo'
+        - $ref: '#/components/parameters/Precision'
+      responses:
+        '200':
+          $ref: '#/components/responses/CalculationResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/mul:
+    get:
+      operationId: multiply
+      summary: Multiplicação (term_one * term_two)
+      tags: [calculator]
+      parameters:
+        - $ref: '#/components/parameters/TermOne'
+        - $ref: '#/components/parameters/TermTwo'
+        - $ref: '#/components/parameters/Precision'
+      responses:
+        '200':
+          $ref: '#/components/responses/CalculationResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/div:
+    get:
+      operationId: divide
+      summary: Divisão (term_one / term_two)
+      tags: [calculator]
+      parameters:
+        - $ref: '#/components/parameters/TermOne'
+        - $ref: '#/components/parameters/TermTwo'
+        - $ref: '#/components/parameters/Precision'
+      responses:
+        '200':
+          $ref: '#/components/responses/CalculationResult'
+        '400':
+          description: |
+            Requisição inválida (parâmetros ausentes/inválidos ou divisão por zero).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  parameters:
+    TermOne:
+      name: term_one
+      in: query
+      required: true
+      description: Primeiro termo da operação.
+      schema:
+        type: number
+        format: double
+        example: 4
+    TermTwo:
+      name: term_two
+      in: query
+      required: true
+      description: Segundo termo da operação.
+      schema:
+        type: number
+        format: double
+        example: 1
+    Precision:
+      name: precision
+      in: query
+      required: false
+      description: |
+        Número de casas decimais do resultado (truncado, sem arredondar).
+        Quando ausente, o resultado é truncado para inteiro.
+      schema:
+        type: integer
+        minimum: 0
+        maximum: 15
+        example: 2
+
+  responses:
+    CalculationResult:
+      description: Resultado da operação.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CalculationResult'
+    BadRequest:
+      description: Requisição inválida (parâmetros ausentes ou inválidos).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    CalculationResult:
+      type: object
+      required: [result]
+      properties:
+        result:
+          type: number
+          format: double
+          description: |
+            Resultado da operação. Inteiro quando `precision` é omitido,
+            decimal (truncado a `precision` casas) caso contrário.
+          example: 3
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          description: Descrição legível do erro.
+          example: "term_two must not be zero"
