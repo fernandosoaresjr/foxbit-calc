@@ -13,3 +13,8 @@ coverage.html
 *.swp
 .vscode/
 .idea/
+
+# Helm: dependências baixadas e snapshots gerados (Chart.lock é versionado)
+chart/charts/
+chart/tests/__snapshot__/
+*.tgz

@@ -1,0 +1,174 @@
+# Valores padrão do chart foxbit-calc.
+# Este arquivo é AGNÓSTICO a ambiente: não contém endereços, segredos nem nada
+# específico de um cluster. Sobrescreva via -f <seu-values.yaml> (ver k8s/).
+
+# -----------------------------------------------------------------------------
+# Configurações gerais da aplicação
+# -----------------------------------------------------------------------------
+image:
+  # Repositório da imagem da aplicação (sem a tag).
+  repository: ghcr.io/fernandosoaresjr/foxbit-calc
+  # Tag da imagem. Vazio => usa .Chart.AppVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+# Secrets para pull de imagem privada (ex.: [{name: ghcr-creds}]).
+imagePullSecrets: []
+
+# Número de réplicas da aplicação.
+replicaCount: 2
+
+# Porta HTTP da aplicação (o desafio exige 8000).
+service:
+  # ClusterIP garante que a app seja acessível SOMENTE dentro do cluster.
+  type: ClusterIP
+  port: 8000
+
+# Variáveis de ambiente extras (lista de {name, value}).
+extraEnv: []
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+logging:
+  # Nível: debug | info | warn | error
+  level: info
+  # Formato: json | text
+  format: json
+
+# -----------------------------------------------------------------------------
+# Operação custosa simulada
+# -----------------------------------------------------------------------------
+# Delay aplicado em cache miss para simular uma operação cara (ex.: 5s).
+# Use uma duração Go válida ("5s", "0s", "200ms").
+calcDelay: "5s"
+
+# -----------------------------------------------------------------------------
+# Cache (Redis)
+# -----------------------------------------------------------------------------
+cache:
+  # Liga/desliga o cache NA APLICAÇÃO. Quando false, as demais opções de cache
+  # são ignoradas e a aplicação roda sem cache.
+  enabled: false
+
+  # Tempo de expiração de cada entrada de cache (duração Go).
+  ttl: "60s"
+
+  # Backend do cache quando enabled=true:
+  #   internal -> usa o subchart bitnami/redis (defina redis.enabled=true)
+  #   external -> usa um Redis externo (preencha cache.external)
+  type: internal
+
+  # Configuração do Redis EXTERNO (usado quando type=external).
+  external:
+    # Endereço host:port do Redis externo.
+    address: ""
+    # Índice do banco Redis.
+    db: 0
+    # Senha em texto puro (apenas para testes; prefira existingSecret).
+    password: ""
+    # Secret já existente contendo a senha do Redis.
+    existingSecret: ""
+    existingSecretPasswordKey: "redis-password"
+
+# -----------------------------------------------------------------------------
+# Subchart bitnami/redis (Redis INTERNO)
+# -----------------------------------------------------------------------------
+# Habilite (redis.enabled=true) somente quando cache.enabled=true e
+# cache.type=internal. Configurado como standalone, sem persistência (dados de
+# cache são descartáveis) e expondo métricas.
+redis:
+  enabled: false
+  architecture: standalone
+  auth:
+    # Sem autenticação: o Redis interno é acessível só dentro do cluster e os
+    # dados de cache não são sensíveis. Simplifica o wiring da aplicação.
+    enabled: false
+  master:
+    persistence:
+      enabled: false
+  metrics:
+    # Exporter de métricas do Redis (Prometheus).
+    enabled: true
+    serviceMonitor:
+      # Criado apenas se o ServiceMonitor CRD existir no cluster (ver abaixo).
+      # Reaproveita o flag global de monitoramento.
+      enabled: true
+
+# -----------------------------------------------------------------------------
+# Monitoramento (Prometheus Operator)
+# -----------------------------------------------------------------------------
+serviceMonitor:
+  # Cria um ServiceMonitor para a aplicação. Só é criado se o CRD
+  # monitoring.coreos.com/v1 estiver disponível no cluster; caso contrário, a
+  # instalação prossegue e um aviso é exibido (ver NOTES).
+  enabled: false
+  # Intervalo de coleta.
+  interval: 30s
+  scrapeTimeout: 10s
+  # Labels extras no ServiceMonitor (ex.: para casar com o Prometheus do cluster).
+  labels: {}
+
+# -----------------------------------------------------------------------------
+# Recursos (requests/limits)
+# -----------------------------------------------------------------------------
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi
+
+# -----------------------------------------------------------------------------
+# Segurança (Pod e Container Security Context)
+# -----------------------------------------------------------------------------
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# -----------------------------------------------------------------------------
+# Probes (startup, liveness, readiness)
+# -----------------------------------------------------------------------------
+# Os endpoints /healthz e /readyz NÃO dependem do Redis (a app degrada sem cache).
+probes:
+  startup:
+    enabled: true
+    path: /healthz
+    failureThreshold: 30
+    periodSeconds: 2
+  liveness:
+    enabled: true
+    path: /healthz
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    path: /readyz
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+
+# -----------------------------------------------------------------------------
+# Agendamento
+# -----------------------------------------------------------------------------
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Sobrescreve o nome dos recursos, se necessário.
+nameOverride: ""
+fullnameOverride: ""

@@ -1,0 +1,28 @@
+apiVersion: v2
+name: foxbit-calc
+description: |
+  Helm chart para a API de calculadora Foxbit Calc. Faz deploy da aplicação
+  (acessível somente dentro do cluster), com cache Redis opcional (interno via
+  subchart bitnami/redis ou externo) e integração opcional com o Prometheus
+  Operator (ServiceMonitor).
+type: application
+
+# Versão do chart (SemVer). Incremente a cada mudança no chart.
+version: 0.1.0
+
+# Versão da aplicação empacotada. Sobrescrita pelo CI com a tag da imagem.
+appVersion: "1.0.0"
+
+keywords:
+  - calculator
+  - api
+  - foxbit
+  - sre
+
+dependencies:
+  # Redis interno (usado quando cache.enabled=true e cache.type=internal).
+  # Habilitado por redis.enabled. Versão fixada para builds reprodutíveis.
+  - name: redis
+    version: "27.0.10"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled
