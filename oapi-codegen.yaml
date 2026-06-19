@@ -1,0 +1,12 @@
+# Configuração do oapi-codegen (https://github.com/oapi-codegen/oapi-codegen)
+# Gera a ServerInterface (Echo), os tipos/models e a spec embarcada num único
+# arquivo. Os handlers que implementam a ServerInterface ficam em
+# internal/api/handlers.go (escritos à mão) e NÃO são tocados pela regeneração.
+package: api
+output: internal/api/api.gen.go
+generate:
+  echo-server: true
+  models: true
+  embedded-spec: true
+output-options:
+  skip-prune: false

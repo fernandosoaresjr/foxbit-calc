@@ -1,0 +1,15 @@
+# Binários e artefatos de build
+/bin/
+/dist/
+/out/
+server
+
+# Cobertura de testes
+coverage.out
+coverage.html
+
+# Sistema operacional / editores
+.DS_Store
+*.swp
+.vscode/
+.idea/
