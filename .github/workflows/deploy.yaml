@@ -1,20 +1,41 @@
 name: Deploy
 
-# CD: faz deploy da aplicação no cluster Kubernetes via Helm e verifica o
-# resultado. Dispara automaticamente após o "App CI" concluir com sucesso na
-# main (garantindo que a imagem já foi publicada) e também manualmente.
+# CD: faz deploy da aplicação no cluster via Helm e verifica o resultado.
+#
+# Dispara em push na main quando MUDA o app, o chart ou os values. Como um merge
+# é UM único evento de push, há sempre UM único deploy — mesmo que o PR tenha
+# alterado app e chart ao mesmo tempo.
+#
+# Ordem imagem -> deploy: o deploy roda em paralelo ao "App CI". Se o app mudou,
+# usa a tag do commit (sha) e AGUARDA a imagem aparecer no GHCR antes de
+# implantar. Se só o chart/values mudou (app inalterado), implanta a imagem
+# `latest` já publicada.
 
 on:
-  workflow_run:
-    workflows: ["App CI"]
-    types: [completed]
+  push:
     branches: [main]
+    paths:
+      - "**.go"
+      - go.mod
+      - go.sum
+      - Dockerfile
+      - api/openapi.yaml
+      - oapi-codegen.yaml
+      - chart/**
+      - k8s/**
+      - .github/workflows/deploy.yaml
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Tag da imagem a implantar (default: commit atual)"
+        description: "Tag da imagem a implantar (default: resolvida automaticamente)"
         required: false
         default: ""
+
+# Garante que dois deploys nunca rodem ao mesmo tempo (merges em sequência são
+# enfileirados, não cancelados).
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   HELM_VERSION: "v3.17.1"
@@ -25,23 +46,65 @@ jobs:
   deploy:
     name: Deploy to Kubernetes
     runs-on: ubuntu-latest
-    # Em workflow_run, só prossegue se o App CI passou.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
 
-      - name: Resolve image tag
-        id: tag
+      - name: Detect changed areas
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            app:
+              - '**.go'
+              - go.mod
+              - go.sum
+              - Dockerfile
+              - api/openapi.yaml
+              - oapi-codegen.yaml
+
+      - name: Resolve image reference
+        id: ref
+        env:
+          EVENT: ${{ github.event_name }}
+          DISPATCH_TAG: ${{ github.event.inputs.image_tag }}
+          APP_CHANGED: ${{ steps.changes.outputs.app }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            echo "value=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
-          elif [ -n "${{ github.event.inputs.image_tag }}" ]; then
-            echo "value=${{ github.event.inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          IMAGE=$(echo "ghcr.io/$REPO" | tr '[:upper:]' '[:lower:]')
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT" = "workflow_dispatch" ] && [ -n "$DISPATCH_TAG" ]; then
+            echo "tag=$DISPATCH_TAG" >> "$GITHUB_OUTPUT"
+            echo "wait=false" >> "$GITHUB_OUTPUT"
+          elif [ "$APP_CHANGED" = "true" ]; then
+            # App mudou: implanta a imagem deste commit (App CI a está publicando).
+            echo "tag=$SHA" >> "$GITHUB_OUTPUT"
+            echo "wait=true" >> "$GITHUB_OUTPUT"
           else
-            echo "value=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            # Só chart/values mudou: implanta a imagem já publicada.
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+            echo "wait=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Wait for image to be published
+        if: steps.ref.outputs.wait == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          IMG: ${{ steps.ref.outputs.image }}:${{ steps.ref.outputs.tag }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          echo "Aguardando $IMG (App CI publicando)..."
+          for i in $(seq 1 40); do
+            if docker buildx imagetools inspect "$IMG" >/dev/null 2>&1; then
+              echo "Imagem disponível."; exit 0
+            fi
+            echo "  ... ainda não disponível ($i/40)"; sleep 15
+          done
+          echo "Timeout aguardando a imagem $IMG (o App CI falhou ou demorou)."; exit 1
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
@@ -52,9 +115,11 @@ jobs:
         uses: azure/setup-kubectl@v4
 
       - name: Configure kubeconfig
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
         run: |
           mkdir -p "$HOME/.kube"
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > "$HOME/.kube/config"
+          echo "$KUBE_CONFIG" | base64 -d > "$HOME/.kube/config"
           chmod 600 "$HOME/.kube/config"
           kubectl cluster-info
 
@@ -67,6 +132,8 @@ jobs:
           # Se vazio (imagem pública), nenhum pull secret é criado.
           GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           ACTOR: ${{ github.actor }}
+          IMAGE: ${{ steps.ref.outputs.image }}
+          TAG: ${{ steps.ref.outputs.tag }}
         run: |
           PULL_ARGS=()
           if [ -n "${GHCR_PULL_TOKEN}" ]; then
@@ -78,10 +145,11 @@ jobs:
           else
             echo "Sem GHCR_PULL_TOKEN: assumindo imagem pública (sem pull secret)."
           fi
+          echo "Implantando ${IMAGE}:${TAG}"
           helm upgrade --install "$RELEASE" ./chart \
             --namespace "$NAMESPACE" --create-namespace \
             -f k8s/values.yaml \
-            --set image.tag="${{ steps.tag.outputs.value }}" \
+            --set image.tag="${TAG}" \
             "${PULL_ARGS[@]}" \
             --wait --timeout 5m
 

@@ -1,18 +1,25 @@
 # Workflows de CI/CD
 
-Três workflows do GitHub Actions automatizam build, teste e deploy.
+Quatro workflows do GitHub Actions automatizam validação, build, teste e deploy.
 
 | Workflow | Arquivo | Dispara em | O que faz |
 | --- | --- | --- | --- |
-| **App CI** | `app-ci.yaml` | push/PR (código da app) | fmt, vet, codegen, testes+cobertura; publica a imagem no GHCR (só na `main`). |
+| **App CI** | `app-ci.yaml` | push/PR (código da app) | fmt, vet, lint OpenAPI (Spectral), codegen, testes+cobertura; publica a imagem no GHCR (só na `main`). |
 | **Chart CI** | `chart-ci.yaml` | push/PR (`chart/`, `k8s/`) | `helm lint`, `helm unittest`, render de sanidade. |
-| **Deploy** | `deploy.yaml` | após "App CI" na `main`, ou manual | `helm upgrade --install` no cluster + verificação. |
+| **Deploy** | `deploy.yaml` | push na `main` (app **ou** chart/values), ou manual | `helm upgrade --install` no cluster + verificação. |
+| **Secret Scan** | `secret-scan.yaml` | todo push/PR | varre o repositório por credenciais commitadas (gitleaks). |
 
 ## Introdução
 
-O fluxo segue a ordem: **App CI** valida e publica a imagem → **Deploy** (via
-`workflow_run`) implanta a imagem recém-publicada no cluster. **Chart CI** é
-independente e valida o chart em qualquer mudança.
+O **App CI** valida e publica a imagem; o **Chart CI** valida o chart; o
+**Secret Scan** varre segredos. O **Deploy** dispara no `push` para a `main`
+quando muda o app **ou** o `chart/`/`k8s/`. Como um merge é **um único push**,
+há sempre **um único deploy**, mesmo que o PR tenha alterado app e chart juntos.
+
+Ordem imagem→deploy: o Deploy roda em paralelo ao App CI. Se o **app** mudou, ele
+usa a tag do commit (`sha`) e **aguarda a imagem** ser publicada no GHCR antes de
+implantar. Se só o **chart/values** mudou, implanta a imagem `latest` existente
+(a aplicação não mudou).
 
 ## Configuração
 
@@ -64,24 +71,30 @@ credenciais para baixá-la. Há três opções:
 
 ## Uso
 
-- **App CI / Chart CI**: acionados automaticamente por push e pull request nos
-  caminhos relevantes. Veja os logs em **Actions**; a cobertura fica em
-  *Artifacts* (`coverage`).
-- **Deploy**: roda sozinho após o App CI na `main`. Para implantar uma tag
-  específica manualmente, use **Run workflow** (input `image_tag`).
+- **App CI / Chart CI / Secret Scan**: acionados automaticamente por push e pull
+  request nos caminhos relevantes. Veja os logs em **Actions**; a cobertura fica
+  em *Artifacts* (`coverage`).
+- **Deploy**: roda no push para a `main` quando muda o app ou o chart/values.
+  Para implantar uma tag específica manualmente, use **Run workflow** (input
+  `image_tag`).
 
 ## Arquitetura
 
 ```
-push main ──> App CI ──(imagem no GHCR)──> workflow_run ──> Deploy ──> cluster
-   │                                                          │
-   └────────────> Chart CI (lint + unittest)                 └─> verificação (rollout + smoke test)
+                    ┌─> App CI (test sempre; imagem no GHCR só na main)
+push/PR ───────────>├─> Chart CI (helm lint + unittest)
+                    └─> Secret Scan (gitleaks)
+
+push main (app OU chart/k8s) ──> Deploy ──> [app mudou? aguarda imagem :sha
+                                             senão usa :latest] ──> helm upgrade
+                                             ──> rollout + smoke test no cluster
 ```
 
 - **App CI** separa `test` (sempre) de `image` (só `main`), evitando publicar
   imagens de PR.
-- **Deploy** resolve a tag a partir do `head_sha` do App CI, garantindo que a
-  imagem implantada é exatamente a que passou no CI.
+- **Deploy por `push` (não `workflow_run`)** — um merge é um único push, logo um
+  único deploy, mesmo quando o PR altera app e chart juntos. A detecção de
+  mudança (`paths-filter`) decide a tag e se deve aguardar a imagem.
 - **Verificação** roda `rollout status` e um *smoke test* dentro do cluster
   (pod efêmero `curl` no Service `ClusterIP`), com coleta de diagnósticos em
   caso de falha.
@@ -89,8 +102,14 @@ push main ──> App CI ──(imagem no GHCR)──> workflow_run ──> Depl
 ## Decisões de design
 
 - **GitHub Actions** — nativo ao repositório, sem infraestrutura adicional.
-- **`workflow_run` em vez de um job único** — desacopla CI de CD e garante a
-  ordem imagem→deploy sem corrida.
+- **Deploy disparado por `push` com `paths` de app+chart+k8s** — garante deploy
+  em mudanças de app **ou** chart, e exatamente **um** deploy por merge (sem o
+  duplo disparo que `workflow_run` de dois workflows causaria). `concurrency`
+  enfileira deploys para nunca rodarem sobrepostos.
+- **Espera ativa da imagem** — desacopla build (App CI) de deploy sem corrida:
+  o Deploy só implanta `:sha` depois que a imagem aparece no GHCR.
 - **Publicação só na `main`** — PRs validam, mas não publicam imagens nem
   implantam, protegendo o ambiente.
+- **Lint de contrato (Spectral) + secret scan (gitleaks)** — qualidade de API e
+  segurança verificadas em todo PR, antes do merge.
 - **GHCR** — integrado ao GitHub e ao `GITHUB_TOKEN`, sem credenciais externas.

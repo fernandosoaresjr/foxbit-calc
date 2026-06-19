@@ -205,7 +205,8 @@ Para deploy automatizado (quando o cluster é acessível pela internet):
      for privada — o chart cria a pull secret no cluster automaticamente. Se o
      pacote for público, omita.
 4. `git push` na `main`: o **App CI** publica a imagem no GHCR e o **Deploy**
-   (via `workflow_run`) implanta no cluster e roda um smoke test.
+   (disparado pelo push, em app **ou** chart/values) implanta no cluster e roda
+   um smoke test. Um merge gera sempre **um único** deploy.
 
 Detalhes, secrets e arquitetura dos workflows em
 [`.github/workflows/README.md`](./.github/workflows/README.md).
