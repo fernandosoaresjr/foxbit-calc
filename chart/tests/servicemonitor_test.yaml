@@ -16,7 +16,7 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: cria o ServiceMonitor quando o CRD está disponível
+  - it: cria o ServiceMonitor da aplicação quando o CRD está disponível
     set:
       serviceMonitor.enabled: true
       serviceMonitor.interval: 15s
@@ -24,6 +24,8 @@ tests:
       apiVersions:
         - monitoring.coreos.com/v1
     asserts:
+      - hasDocuments:
+          count: 1
       - isKind:
           of: ServiceMonitor
       - equal:
@@ -32,3 +34,24 @@ tests:
       - equal:
           path: spec.endpoints[0].interval
           value: 15s
+
+  - it: cria SM da app e do redis no modo interno com CRD
+    set:
+      serviceMonitor.enabled: true
+      cache.enabled: true
+      cache.type: internal
+      redis.enabled: true
+    capabilities:
+      apiVersions:
+        - monitoring.coreos.com/v1
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-foxbit-calc-redis
+        documentIndex: 1
+      - equal:
+          path: spec.endpoints[0].port
+          value: http-metrics
+        documentIndex: 1

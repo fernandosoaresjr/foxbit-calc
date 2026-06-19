@@ -87,12 +87,15 @@ redis:
     persistence:
       enabled: false
   metrics:
-    # Exporter de métricas do Redis (Prometheus).
+    # Exporter de métricas do Redis (Prometheus) — expõe o service de métricas.
     enabled: true
     serviceMonitor:
-      # Criado apenas se o ServiceMonitor CRD existir no cluster (ver abaixo).
-      # Reaproveita o flag global de monitoramento.
-      enabled: true
+      # Desabilitado de propósito: o ServiceMonitor do subchart NÃO faz checagem
+      # do CRD e quebraria a instalação em clusters sem o Prometheus Operator.
+      # Este chart cria seu PRÓPRIO ServiceMonitor para o Redis, com a mesma
+      # checagem de capability do ServiceMonitor da aplicação (ver
+      # serviceMonitor.enabled abaixo).
+      enabled: false
 
 # -----------------------------------------------------------------------------
 # Monitoramento (Prometheus Operator)
