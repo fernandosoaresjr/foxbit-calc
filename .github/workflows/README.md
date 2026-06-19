@@ -23,11 +23,12 @@ nenhum segredo extra é necessário para a imagem.
 
 ### Secrets
 
-| Secret | Usado por | Descrição |
-| --- | --- | --- |
-| `KUBE_CONFIG` | Deploy | `kubeconfig` do cluster, **codificado em base64**. |
+| Secret | Usado por | Obrigatório | Descrição |
+| --- | --- | --- | --- |
+| `KUBE_CONFIG` | Deploy | sim | `kubeconfig` do cluster, **codificado em base64**. |
+| `GHCR_PULL_TOKEN` | Deploy | não | PAT com `read:packages` para o cluster baixar a imagem privada do GHCR. Omita se a imagem for pública. |
 
-Gere o secret a partir do seu `kubeconfig`:
+Gere o `KUBE_CONFIG` a partir do seu `kubeconfig`:
 
 ```bash
 base64 -w0 ~/.kube/config   # Linux
@@ -44,9 +45,22 @@ repository secret** com o nome `KUBE_CONFIG`.
 
 ### Imagem privada no GHCR
 
-Por padrão a imagem publicada no GHCR é privada. Para o cluster baixá-la, crie um
-`imagePullSecret` e referencie-o em `imagePullSecrets` no `k8s/values.yaml`, ou
-torne o pacote público em **Packages → Package settings**.
+Por padrão a imagem publicada no GHCR é privada e o cluster precisa de
+credenciais para baixá-la. Há três opções:
+
+1. **Pacote público** (mais simples) — torne o pacote público em **Packages →
+   Package settings**. Nenhum secret é necessário.
+2. **Pull secret gerenciado pelo chart** (recomendado para registry privado) —
+   configure o secret `GHCR_PULL_TOKEN` (PAT com `read:packages`). O workflow de
+   Deploy passa as credenciais ao Helm via `--set`, e o chart cria um Secret
+   `kubernetes.io/dockerconfigjson` no cluster, referenciando-o automaticamente.
+   As credenciais **nunca** ficam no `values.yaml`.
+3. **Pull secret pré-existente** — crie a Secret manualmente
+   (`kubectl create secret docker-registry ...`) e referencie-a em
+   `imagePullSecrets` no `k8s/values.yaml`.
+
+> Evite usar o `GITHUB_TOKEN` do job como credencial de pull do cluster: ele
+> **expira ao fim do workflow**, e o nó falharia ao re-baixar a imagem depois.
 
 ## Uso
 

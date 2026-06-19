@@ -62,11 +62,27 @@ jobs:
         run: helm dependency build ./chart
 
       - name: Deploy with Helm
+        env:
+          # PAT com read:packages para o cluster baixar a imagem do GHCR.
+          # Se vazio (imagem pública), nenhum pull secret é criado.
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          ACTOR: ${{ github.actor }}
         run: |
+          PULL_ARGS=()
+          if [ -n "${GHCR_PULL_TOKEN}" ]; then
+            echo "GHCR_PULL_TOKEN presente: criando pull secret gerenciado pelo chart."
+            PULL_ARGS+=(--set imagePullSecret.create=true)
+            PULL_ARGS+=(--set imagePullSecret.registry=ghcr.io)
+            PULL_ARGS+=(--set imagePullSecret.username="${ACTOR}")
+            PULL_ARGS+=(--set-string imagePullSecret.password="${GHCR_PULL_TOKEN}")
+          else
+            echo "Sem GHCR_PULL_TOKEN: assumindo imagem pública (sem pull secret)."
+          fi
           helm upgrade --install "$RELEASE" ./chart \
             --namespace "$NAMESPACE" --create-namespace \
             -f k8s/values.yaml \
             --set image.tag="${{ steps.tag.outputs.value }}" \
+            "${PULL_ARGS[@]}" \
             --wait --timeout 5m
 
       - name: Verify rollout

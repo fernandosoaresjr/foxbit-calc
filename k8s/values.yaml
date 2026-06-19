@@ -17,7 +17,11 @@ image:
   tag: ""           # vazio = usa o appVersion do chart; o CD seta a tag do commit
   pullPolicy: IfNotPresent
 
-# Se a imagem do GHCR for privada, crie um secret de pull e referencie aqui:
+# Imagem privada? Três opções:
+#  1. Torne o pacote do GHCR público (nada a fazer aqui).
+#  2. Deixe o workflow de Deploy criar a pull secret (configure o secret
+#     GHCR_PULL_TOKEN no GitHub — o chart cria o Secret automaticamente).
+#  3. Crie a Secret manualmente e referencie aqui:
 # imagePullSecrets:
 #   - name: ghcr-creds
 

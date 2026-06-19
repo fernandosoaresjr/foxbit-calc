@@ -199,8 +199,11 @@ Para deploy automatizado (quando o cluster é acessível pela internet):
 1. Faça **fork** deste repositório.
 2. Em `k8s/values.yaml`, ajuste `image.repository` para o seu owner do GHCR e o
    bloco de `cache`/`serviceMonitor` conforme o cluster.
-3. Configure o secret `KUBE_CONFIG` (kubeconfig em base64) em **Settings →
-   Secrets and variables → Actions**.
+3. Configure os secrets em **Settings → Secrets and variables → Actions**:
+   - `KUBE_CONFIG` (obrigatório): kubeconfig do cluster em base64.
+   - `GHCR_PULL_TOKEN` (opcional): PAT com `read:packages`, se a imagem do GHCR
+     for privada — o chart cria a pull secret no cluster automaticamente. Se o
+     pacote for público, omita.
 4. `git push` na `main`: o **App CI** publica a imagem no GHCR e o **Deploy**
    (via `workflow_run`) implanta no cluster e roda um smoke test.
 
