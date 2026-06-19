@@ -11,8 +11,20 @@ image:
   # Tag da imagem. Vazio => usa .Chart.AppVersion.
   tag: ""
   pullPolicy: IfNotPresent
-# Secrets para pull de imagem privada (ex.: [{name: ghcr-creds}]).
+# Referências a Secrets de pull JÁ EXISTENTES no cluster (ex.: [{name: ghcr-creds}]).
 imagePullSecrets: []
+
+# Cria um Secret de pull (kubernetes.io/dockerconfigjson) gerenciado pelo chart,
+# a partir de credenciais fornecidas no deploy. Útil para registries privados
+# (GHCR, Docker Hub) sem precisar criar a Secret manualmente no cluster.
+# As credenciais NÃO ficam no values.yaml: passe-as via --set no deploy (o
+# workflow de CD faz isso a partir de um secret do GitHub). Default: desabilitado
+# (assume imagem pública). O Secret criado é referenciado automaticamente.
+imagePullSecret:
+  create: false
+  registry: ghcr.io
+  username: ""
+  password: ""
 
 # Número de réplicas da aplicação.
 replicaCount: 2

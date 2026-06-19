@@ -69,6 +69,49 @@ Endereço do Redis conforme o modo de cache:
 {{- end -}}
 
 {{/*
+Nome do Secret de pull de imagem criado pelo chart (quando
+imagePullSecret.create=true).
+*/}}
+{{- define "foxbit-calc.pullSecretName" -}}
+{{- printf "%s-pull" (include "foxbit-calc.fullname" .) -}}
+{{- end -}}
+
+{{/*
+Conteúdo .dockerconfigjson (base64) para o Secret de pull de imagem.
+*/}}
+{{- define "foxbit-calc.dockerconfigjson" -}}
+{{- $reg := .Values.imagePullSecret.registry -}}
+{{- $user := .Values.imagePullSecret.username -}}
+{{- $pass := .Values.imagePullSecret.password -}}
+{{- $auth := printf "%s:%s" $user $pass | b64enc -}}
+{{- $cfg := dict "auths" (dict $reg (dict "username" $user "password" $pass "auth" $auth)) -}}
+{{- $cfg | toJson | b64enc -}}
+{{- end -}}
+
+{{/*
+Lista efetiva de imagePullSecrets: referências existentes (imagePullSecrets) mais
+o Secret criado pelo chart (quando imagePullSecret.create=true).
+*/}}
+{{- define "foxbit-calc.imagePullSecrets" -}}
+{{- $secrets := .Values.imagePullSecrets | default list -}}
+{{- if .Values.imagePullSecret.create -}}
+{{- $secrets = append $secrets (dict "name" (include "foxbit-calc.pullSecretName" .)) -}}
+{{- end -}}
+{{- toYaml $secrets -}}
+{{- end -}}
+
+{{/*
+Valida a configuração do Secret de pull de imagem.
+*/}}
+{{- define "foxbit-calc.validateImagePullSecret" -}}
+{{- if .Values.imagePullSecret.create -}}
+{{- if or (not .Values.imagePullSecret.registry) (not .Values.imagePullSecret.username) (not .Values.imagePullSecret.password) -}}
+{{- fail "imagePullSecret.create=true exige imagePullSecret.registry, .username e .password" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Nome do Secret que guarda a senha do Redis externo (gerado pelo chart) quando
 uma senha em texto puro é fornecida sem existingSecret.
 */}}

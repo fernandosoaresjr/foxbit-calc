@@ -18,7 +18,8 @@ spec:
         # Força rollout quando a configuração (ConfigMap) muda.
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
-      {{- with .Values.imagePullSecrets }}
+      {{- $pullSecrets := include "foxbit-calc.imagePullSecrets" . | fromYamlArray }}
+      {{- with $pullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
