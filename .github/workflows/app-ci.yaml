@@ -1,0 +1,114 @@
+name: App CI
+
+# CI da aplicação web: build, testes, cobertura e (apenas na main) publicação
+# da imagem no GitHub Container Registry (GHCR).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**.go"
+      - go.mod
+      - go.sum
+      - Dockerfile
+      - api/openapi.yaml
+      - oapi-codegen.yaml
+      - .github/workflows/app-ci.yaml
+  pull_request:
+    paths:
+      - "**.go"
+      - go.mod
+      - go.sum
+      - Dockerfile
+      - api/openapi.yaml
+      - oapi-codegen.yaml
+      - .github/workflows/app-ci.yaml
+
+env:
+  GO_VERSION: "1.22"
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Verify formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-ed:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Verify generated code is up to date
+        run: |
+          make generate
+          git diff --exit-code -- internal/api/api.gen.go || {
+            echo "internal/api/api.gen.go is out of date. Run 'make generate' and commit."; exit 1;
+          }
+
+      - name: Run tests with coverage
+        run: go test ./... -race -coverprofile=coverage.out -covermode=atomic
+
+      - name: Coverage report
+        run: |
+          go tool cover -func=coverage.out | tee coverage.txt
+          go tool cover -html=coverage.out -o coverage.html
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage.out
+            coverage.txt
+            coverage.html
+
+  image:
+    name: Build & Push image
+    runs-on: ubuntu-latest
+    needs: test
+    # Publica a imagem apenas em push para a main (não em pull requests).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ github.sha }}
+            type=sha,format=short
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

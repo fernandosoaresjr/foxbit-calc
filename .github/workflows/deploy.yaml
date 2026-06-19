@@ -1,0 +1,91 @@
+name: Deploy
+
+# CD: faz deploy da aplicação no cluster Kubernetes via Helm e verifica o
+# resultado. Dispara automaticamente após o "App CI" concluir com sucesso na
+# main (garantindo que a imagem já foi publicada) e também manualmente.
+
+on:
+  workflow_run:
+    workflows: ["App CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag da imagem a implantar (default: commit atual)"
+        required: false
+        default: ""
+
+env:
+  HELM_VERSION: "v3.17.1"
+  NAMESPACE: foxbit-calc
+  RELEASE: foxbit-calc
+
+jobs:
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    # Em workflow_run, só prossegue se o App CI passou.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "value=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            echo "value=${{ github.event.inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+          kubectl cluster-info
+
+      - name: Build chart dependencies
+        run: helm dependency build ./chart
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install "$RELEASE" ./chart \
+            --namespace "$NAMESPACE" --create-namespace \
+            -f k8s/values.yaml \
+            --set image.tag="${{ steps.tag.outputs.value }}" \
+            --wait --timeout 5m
+
+      - name: Verify rollout
+        run: |
+          kubectl -n "$NAMESPACE" rollout status deploy/"$RELEASE" --timeout=120s
+          kubectl -n "$NAMESPACE" get pods -o wide
+
+      - name: Smoke test inside the cluster
+        run: |
+          set -euo pipefail
+          SVC="http://$RELEASE.$NAMESPACE.svc.cluster.local:8000"
+          echo "Checking $SVC/healthz and an operation..."
+          kubectl -n "$NAMESPACE" run "smoke-$GITHUB_RUN_ID" \
+            --rm -i --restart=Never --image=curlimages/curl:8.10.1 --command -- \
+            sh -c "curl -sf $SVC/healthz && echo && curl -sf '$SVC/api/sum?term_one=4&term_two=1'"
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          echo "::group::Pods"; kubectl -n "$NAMESPACE" get pods -o wide || true; echo "::endgroup::"
+          echo "::group::Describe"; kubectl -n "$NAMESPACE" describe pods || true; echo "::endgroup::"
+          echo "::group::Logs"; kubectl -n "$NAMESPACE" logs -l app.kubernetes.io/name=foxbit-calc --tail=200 || true; echo "::endgroup::"
