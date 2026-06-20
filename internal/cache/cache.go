@@ -29,7 +29,7 @@ type NoopCache struct{}
 // NewNoopCache cria um NoopCache.
 func NewNoopCache() *NoopCache { return &NoopCache{} }
 
-func (NoopCache) Get(context.Context, string) (float64, bool, error) { return 0, false, nil }
+func (NoopCache) Get(context.Context, string) (float64, bool, error)        { return 0, false, nil }
 func (NoopCache) Set(context.Context, string, float64, time.Duration) error { return nil }
 func (NoopCache) Ping(context.Context) error                                { return nil }
 func (NoopCache) Close() error                                              { return nil }

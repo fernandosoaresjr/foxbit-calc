@@ -43,8 +43,8 @@ func TestEndpointsSuccess(t *testing.T) {
 		{"/api/sum?term_one=4&term_two=1", 5},
 		{"/api/sub?term_one=4&term_two=1", 3},
 		{"/api/mul?term_one=4&term_two=3", 12},
-		{"/api/div?term_one=4&term_two=3", 1},               // truncado para inteiro
-		{"/api/div?term_one=4&term_two=3&precision=2", 1.33}, // truncado a 2 casas
+		{"/api/div?term_one=4&term_two=3", 1},                 // truncado para inteiro
+		{"/api/div?term_one=4&term_two=3&precision=2", 1.33},  // truncado a 2 casas
 		{"/api/sum?term_one=1.5&term_two=2.5&precision=1", 4}, // 4.0
 	}
 	for _, tt := range tests {
@@ -91,9 +91,9 @@ func TestDivisionByZeroReturns400(t *testing.T) {
 func TestInvalidParamsReturn400(t *testing.T) {
 	e := newTestRouter()
 	cases := []string{
-		"/api/sum?term_two=1",              // term_one ausente
-		"/api/sum?term_one=1",              // term_two ausente
-		"/api/sum?term_one=abc&term_two=1", // term_one não numérico
+		"/api/sum?term_two=1",                         // term_one ausente
+		"/api/sum?term_one=1",                         // term_two ausente
+		"/api/sum?term_one=abc&term_two=1",            // term_one não numérico
 		"/api/sum?term_one=1&term_two=2&precision=99", // precision fora do range
 		"/api/sum?term_one=1&term_two=2&precision=-1", // precision negativa
 	}

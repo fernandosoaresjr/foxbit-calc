@@ -18,11 +18,11 @@ import (
 
 // fakeCache é um cache em memória com hooks para forçar erros nos testes.
 type fakeCache struct {
-	mu      sync.Mutex
-	data    map[string]float64
-	getErr  error
-	setErr  error
-	sets    int
+	mu     sync.Mutex
+	data   map[string]float64
+	getErr error
+	setErr error
+	sets   int
 }
 
 func newFakeCache() *fakeCache { return &fakeCache{data: map[string]float64{}} }
