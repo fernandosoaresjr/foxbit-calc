@@ -2,7 +2,7 @@
 /bin/
 /dist/
 /out/
-server
+/server
 
 # Cobertura de testes
 coverage.out
