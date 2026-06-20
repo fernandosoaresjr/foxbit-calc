@@ -2,21 +2,20 @@
 
 API REST das quatro operações básicas da matemática (adição, subtração,
 multiplicação e divisão), em **Go + Echo**, com cache **Redis** opcional,
-observabilidade (logs JSON + métricas Prometheus), **Helm chart** para deploy em
-Kubernetes e **CI/CD** com GitHub Actions.
+observabilidade (logs JSON + métricas Prometheus) e **CI/CD** com GitHub Actions.
 
-Solução do [desafio técnico de SRE](./teste-vaga-sre-foxbit.md).
+Solução do [desafio técnico de SRE](./teste-vaga-sre-foxbit.md). O deploy em
+Kubernetes vive em repositórios separados — ver [Repositórios relacionados](#repositórios-relacionados).
 
 ## Índice
 
 - [Arquitetura](#arquitetura)
+- [Repositórios relacionados](#repositórios-relacionados)
 - [API](#api)
 - [Desenvolvimento local](#desenvolvimento-local)
 - [Configuração (variáveis de ambiente)](#configuração-variáveis-de-ambiente)
 - [Docker](#docker)
-- [Deploy no Kubernetes](#deploy-no-kubernetes)
-  - [Caminho 1 — `helm install` manual (recomendado)](#caminho-1--helm-install-manual-recomendado)
-  - [Caminho 2 — CI/CD por fork](#caminho-2--cicd-por-fork)
+- [Deploy](#deploy)
 - [Observabilidade](#observabilidade)
 - [Testes e cobertura](#testes-e-cobertura)
 - [Decisões de design](#decisões-de-design)
@@ -33,14 +32,23 @@ internal/
   config            → carga de configuração via env
   observability     → logger JSON (slog) + métricas Prometheus
 api/openapi.yaml    → contrato REST (fonte da verdade, contract-first)
-chart/              → Helm chart (ver chart/README.md)
-k8s/values.yaml     → values de exemplo para o avaliador
 .github/workflows/  → CI/CD (ver .github/workflows/README.md)
 ```
 
 Fluxo de uma requisição:
 `Echo (gerado) → handler → service → calculator`, com o `service` consultando o
 cache e aplicando o delay (operação custosa simulada) apenas em *cache miss*.
+
+## Repositórios relacionados
+
+Este repositório contém **apenas a aplicação**. O deploy em Kubernetes foi
+separado em repositórios próprios, num fluxo GitOps:
+
+| Repositório | Papel |
+| --- | --- |
+| [`foxbit-calc`](https://github.com/fernandosoaresjr/foxbit-calc) | **(este)** a aplicação Go + imagem Docker. |
+| [`foxbit-charts`](https://github.com/fernandosoaresjr/foxbit-charts) | o Helm chart `microservice` (publicado como artefato OCI no GHCR). |
+| [`foxbit-calc-k8s`](https://github.com/fernandosoaresjr/foxbit-calc-k8s) | os `values.yaml`/`version.yaml` de deploy que consomem o chart. |
 
 ## API
 
@@ -135,81 +143,38 @@ docker run --rm -p 8000:8000 -e CALC_DELAY=0s ghcr.io/fernandosoaresjr/foxbit-ca
 Imagem multi-stage baseada em `distroless/static:nonroot` (sem shell, usuário
 não-root).
 
-## Deploy no Kubernetes
+## Deploy
 
 A aplicação é exposta por um `Service` **ClusterIP** — acessível **somente
-dentro do cluster** (requisito do desafio). Detalhes do chart em
-[`chart/README.md`](./chart/README.md).
+dentro do cluster** (requisito do desafio). O chart e os values de deploy vivem
+em repositórios separados (ver [Repositórios relacionados](#repositórios-relacionados)),
+num fluxo **GitOps**:
 
-### Caminho 1 — `helm install` manual (recomendado)
+```
+push na main (este repo)
+  └─ CI: publica ghcr.io/fernandosoaresjr/foxbit-calc:<sha>
+       └─ CD: promove a tag para foxbit-calc-k8s/k8s/version.yaml
+            └─ foxbit-calc-k8s: helm upgrade --install no cluster (chart OCI)
+```
 
-Funciona em qualquer cluster (inclusive o da Foxbit), sem depender de acesso
-externo. Pré-requisitos: `helm` 3.8+, `kubectl` e acesso ao cluster.
+- **Configuração do CD deste repo**: secret `K8S_REPO_TOKEN` (fine-grained PAT
+  com `contents: write` no repo `foxbit-calc-k8s`). Ver
+  [`.github/workflows/README.md`](./.github/workflows/README.md).
+- **Deploy/cluster** (chart, values, `KUBE_CONFIG`): ver o README de
+  [`foxbit-calc-k8s`](https://github.com/fernandosoaresjr/foxbit-calc-k8s).
+
+**Deploy manual** (qualquer cluster, sem CI/CD):
 
 ```bash
-# 1. Baixe a dependência do chart (subchart bitnami/redis)
-helm dependency build ./chart
-
-# 2. Instale usando os values de exemplo (cache interno habilitado)
-helm upgrade --install foxbit-calc ./chart \
+helm upgrade --install foxbit-calc \
+  oci://ghcr.io/fernandosoaresjr/foxbit-charts/microservice --version 0.1.0 \
   -n foxbit-calc --create-namespace \
-  -f k8s/values.yaml
+  --set image.repository=ghcr.io/fernandosoaresjr/foxbit-calc \
+  --set image.tag=<tag> --set cache.enabled=true --set redis.enabled=true --wait
 
-# 3. Aguarde o rollout
-kubectl -n foxbit-calc rollout status deploy/foxbit-calc
-
-# 4. Acesse via port-forward (Service é ClusterIP)
-kubectl -n foxbit-calc port-forward svc/foxbit-calc 8000:8000
+kubectl -n foxbit-calc port-forward svc/foxbit-calc-microservice 8000:8000
 curl "http://localhost:8000/api/sum?term_one=4&term_two=1"   # {"result":5}
 ```
-
-Ajuste `k8s/values.yaml` conforme o ambiente (imagem, cache interno/externo,
-ServiceMonitor). Cada campo está comentado.
-
-**Alterar a API e reimplantar** (cenário de avaliação):
-
-```bash
-# edite o código/contrato, então:
-make generate && make test
-make docker-build && docker push <sua-imagem>:<tag>
-helm upgrade foxbit-calc ./chart -n foxbit-calc -f k8s/values.yaml --set image.tag=<tag>
-```
-
-**Remover**:
-
-```bash
-helm uninstall foxbit-calc -n foxbit-calc
-kubectl delete namespace foxbit-calc   # opcional
-```
-
-> **Teste rápido com [kind](https://kind.sigs.k8s.io/)** (cluster local):
-> ```bash
-> kind create cluster --name foxbit-calc
-> make docker-build
-> kind load docker-image ghcr.io/fernandosoaresjr/foxbit-calc:dev --name foxbit-calc
-> helm dependency build ./chart
-> helm upgrade --install foxbit-calc ./chart -n foxbit-calc --create-namespace \
->   -f k8s/values.yaml --set image.tag=dev --set image.pullPolicy=Never
-> ```
-
-### Caminho 2 — CI/CD por fork
-
-Para deploy automatizado (quando o cluster é acessível pela internet):
-
-1. Faça **fork** deste repositório.
-2. Em `k8s/values.yaml`, ajuste `image.repository` para o seu owner do GHCR e o
-   bloco de `cache`/`serviceMonitor` conforme o cluster.
-3. Configure os secrets em **Settings → Secrets and variables → Actions**:
-   - `KUBE_CONFIG` (obrigatório): kubeconfig do cluster em base64.
-   - `GHCR_PULL_TOKEN` (opcional): PAT com `read:packages`, se a imagem do GHCR
-     for privada — o chart cria a pull secret no cluster automaticamente. Se o
-     pacote for público, omita.
-4. `git push` na `main`: o **App CI** publica a imagem no GHCR e o **Deploy**
-   (disparado pelo push, em app **ou** chart/values) implanta no cluster e roda
-   um smoke test. Um merge gera sempre **um único** deploy.
-
-Detalhes, secrets e arquitetura dos workflows em
-[`.github/workflows/README.md`](./.github/workflows/README.md).
 
 ## Observabilidade
 
@@ -233,10 +198,6 @@ do Redis.
 make test         # go test ./... -race
 make cover        # gera coverage.out e imprime o total
 make cover-html   # gera coverage.html
-
-# Chart:
-helm lint ./chart
-helm unittest ./chart       # requer o plugin helm-unittest
 ```
 
 Cobertura focada no núcleo: `calculator`, `config` e `observability` 100%;
@@ -258,4 +219,7 @@ Cobertura focada no núcleo: `calculator`, `config` e `observability` 100%;
   no hit), conforme as diretrizes do projeto.
 - **Segurança** — imagem distroless não-root, root FS somente leitura,
   capabilities removidas; validação de entrada na borda.
-```
+- **Separação em multi-repo** — app, chart e values de deploy ficam em
+  repositórios próprios (GitOps). Cada um tem seu CI/CD independente, evitando o
+  acoplamento de pipelines de um monorepo. Ver
+  [Repositórios relacionados](#repositórios-relacionados).

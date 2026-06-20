@@ -14,7 +14,5 @@ coverage.html
 .vscode/
 .idea/
 
-# Helm: dependências baixadas e snapshots gerados (Chart.lock é versionado)
-chart/charts/
-chart/tests/__snapshot__/
-*.tgz
+# Doc de diretrizes pessoal (não faz parte da entrega)
+diretrizes.md

@@ -2,8 +2,6 @@
 .git
 .github
 .vscode
-chart
-k8s
 *.md
 !api/openapi.yaml
 coverage.out

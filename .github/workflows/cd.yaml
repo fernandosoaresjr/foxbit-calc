@@ -1,0 +1,55 @@
+name: CD
+
+# CD da aplicação: promove a imagem recém-publicada para o repo de deploy.
+# Após o CI concluir com sucesso na main (imagem publicada no GHCR com a tag do
+# commit), commita essa tag em foxbit-calc-k8s/k8s/version.yaml, o que dispara o
+# deploy lá. Roda como workflow_run para garantir que a imagem já existe.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    name: Promote image tag to foxbit-calc-k8s
+    runs-on: ubuntu-latest
+    # Só promove quando o CI passou, num push na main (não em PR).
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.event == 'push'
+    steps:
+      - name: Checkout foxbit-calc-k8s
+        uses: actions/checkout@v4
+        with:
+          repository: fernandosoaresjr/foxbit-calc-k8s
+          token: ${{ secrets.K8S_REPO_TOKEN }}
+          ref: main
+
+      - name: Install yq
+        run: |
+          sudo curl -sSLo /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Update & push image tag
+        env:
+          NEW_TAG: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          CURRENT=$(yq '.image.tag' k8s/version.yaml)
+          if [ "$CURRENT" = "$NEW_TAG" ]; then
+            echo "image.tag já é $NEW_TAG; nada a promover."
+            exit 0
+          fi
+          yq -i ".image.tag = \"$NEW_TAG\"" k8s/version.yaml
+          echo "image.tag: $CURRENT -> $NEW_TAG"
+          git config user.name "foxbit-calc CD"
+          git config user.email "actions@users.noreply.github.com"
+          git add k8s/version.yaml
+          git commit -m "chore(deploy): foxbit-calc image ${NEW_TAG}"
+          git push origin main

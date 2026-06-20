@@ -1,4 +1,4 @@
-name: App CI
+name: CI
 
 # CI da aplicação web: build, testes, cobertura e (apenas na main) publicação
 # da imagem no GitHub Container Registry (GHCR).
@@ -14,7 +14,7 @@ on:
       - api/openapi.yaml
       - oapi-codegen.yaml
       - .spectral.yaml
-      - .github/workflows/app-ci.yaml
+      - .github/workflows/ci.yaml
   pull_request:
     paths:
       - "**.go"
@@ -24,7 +24,8 @@ on:
       - api/openapi.yaml
       - oapi-codegen.yaml
       - .spectral.yaml
-      - .github/workflows/app-ci.yaml
+      - .github/workflows/ci.yaml
+  workflow_dispatch:
 
 env:
   GO_VERSION: "1.22"
