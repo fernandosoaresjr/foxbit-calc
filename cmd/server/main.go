@@ -76,8 +76,12 @@ func run() error {
 // final na inicialização:
 //   - cache desabilitado            -> NoopCache
 //   - habilitado sem REDIS_ADDR     -> erro logado, NoopCache
-//   - habilitado mas Redis offline  -> erro logado, NoopCache
-//   - habilitado e Redis acessível  -> RedisCache
+//   - habilitado e Redis acessível  -> RedisCache (conectado)
+//   - habilitado mas Redis offline  -> warning logado, RedisCache mesmo assim:
+//     o go-redis reconecta sob demanda e o service trata erro de Redis como
+//     cache miss, então o cache passa a funcionar assim que o Redis ficar
+//     acessível — SEM precisar reiniciar a aplicação. Isso evita ficar preso em
+//     "sem cache" quando a app sobe antes do Redis (corrida comum no Kubernetes).
 func initCache(cfg config.Config, logger *slog.Logger) cache.Cache {
 	if !cfg.Cache.Enabled {
 		logger.Info("cache status: disabled (CACHE_ENABLED is false)")
@@ -95,13 +99,26 @@ func initCache(cfg config.Config, logger *slog.Logger) cache.Cache {
 		DB:       cfg.Cache.RedisDB,
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	if err := rc.Ping(ctx); err != nil {
-		logger.Error("cache status: enabled but Redis is unreachable; continuing WITHOUT cache",
-			"redis_addr", cfg.Cache.RedisAddr, "error", err)
-		_ = rc.Close()
-		return cache.NewNoopCache()
+	// O Redis pode subir junto com a aplicação; tentamos conectar por alguns
+	// segundos para logar um status limpo de inicialização.
+	var pingErr error
+	for attempt := 1; attempt <= 10; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		pingErr = rc.Ping(ctx)
+		cancel()
+		if pingErr == nil {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	if pingErr != nil {
+		// Não travamos em "sem cache": mantemos o RedisCache, que se recupera
+		// sozinho quando o Redis ficar acessível (ver doc acima).
+		logger.Warn("cache status: enabled but Redis not reachable at startup; "+
+			"continuing and reconnecting on demand",
+			"redis_addr", cfg.Cache.RedisAddr, "error", pingErr)
+		return rc
 	}
 
 	logger.Info("cache status: enabled and connected",
