@@ -9,16 +9,18 @@ Kubernetes vive em repositórios separados — ver [Repositórios relacionados](
 
 ## Índice
 
-- [Arquitetura](#arquitetura)
-- [Repositórios relacionados](#repositórios-relacionados)
-- [API](#api)
-- [Desenvolvimento local](#desenvolvimento-local)
-- [Configuração (variáveis de ambiente)](#configuração-variáveis-de-ambiente)
-- [Docker](#docker)
-- [Deploy](#deploy)
-- [Observabilidade](#observabilidade)
-- [Testes e cobertura](#testes-e-cobertura)
-- [Decisões de design](#decisões-de-design)
+- [Foxbit Calc](#foxbit-calc)
+  - [Índice](#índice)
+  - [Arquitetura](#arquitetura)
+  - [Repositórios relacionados](#repositórios-relacionados)
+  - [API](#api)
+  - [Desenvolvimento local](#desenvolvimento-local)
+  - [Configuração (variáveis de ambiente)](#configuração-variáveis-de-ambiente)
+  - [Docker](#docker)
+  - [Deploy](#deploy)
+  - [Observabilidade](#observabilidade)
+  - [Testes e cobertura](#testes-e-cobertura)
+  - [Decisões de design](#decisões-de-design)
 
 ## Arquitetura
 
@@ -41,25 +43,24 @@ cache e aplicando o delay (operação custosa simulada) apenas em *cache miss*.
 
 ## Repositórios relacionados
 
-Este repositório contém **apenas a aplicação**. O deploy em Kubernetes foi
-separado em repositórios próprios, num fluxo GitOps:
+Este repositório contém **apenas a aplicação**. O deploy em Kubernetes foi separado em repositórios próprios, num fluxo GitOps:
 
-| Repositório | Papel |
-| --- | --- |
-| [`foxbit-calc`](https://github.com/fernandosoaresjr/foxbit-calc) | **(este)** a aplicação Go + imagem Docker. |
-| [`foxbit-charts`](https://github.com/fernandosoaresjr/foxbit-charts) | o Helm chart `microservice` (publicado como artefato OCI no GHCR). |
-| [`foxbit-calc-k8s`](https://github.com/fernandosoaresjr/foxbit-calc-k8s) | os `values.yaml`/`version.yaml` de deploy que consomem o chart. |
+| Repositório                                                              | Papel                                                              |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| [`foxbit-calc`](https://github.com/fernandosoaresjr/foxbit-calc)         | **(este)** a aplicação Go + imagem Docker.                         |
+| [`foxbit-charts`](https://github.com/fernandosoaresjr/foxbit-charts)     | o Helm chart `microservice` (publicado como artefato OCI no GHCR). |
+| [`foxbit-calc-k8s`](https://github.com/fernandosoaresjr/foxbit-calc-k8s) | os `values.yaml`/`version.yaml` de deploy que consomem o chart.    |
 
 ## API
 
 A aplicação roda na porta **8000**. Endpoints de cálculo:
 
-| Método | Rota | Operação |
-| --- | --- | --- |
-| GET | `/api/sum?term_one=&term_two=` | adição |
-| GET | `/api/sub?term_one=&term_two=` | subtração |
-| GET | `/api/mul?term_one=&term_two=` | multiplicação |
-| GET | `/api/div?term_one=&term_two=` | divisão |
+| Método | Rota                           | Operação      |
+| ------ | ------------------------------ | ------------- |
+| GET    | `/api/sum?term_one=&term_two=` | adição        |
+| GET    | `/api/sub?term_one=&term_two=` | subtração     |
+| GET    | `/api/mul?term_one=&term_two=` | multiplicação |
+| GET    | `/api/div?term_one=&term_two=` | divisão       |
 
 Parâmetros:
 
@@ -78,11 +79,11 @@ GET /api/div?term_one=1&term_two=0            -> 400 {"message":"term_two must n
 
 Endpoints operacionais (fora do contrato, sem o delay):
 
-| Rota | Descrição |
-| --- | --- |
-| `/healthz` | Liveness — processo vivo. |
-| `/readyz` | Readiness — pronto para tráfego (**não depende do Redis**). |
-| `/metrics` | Métricas Prometheus. |
+| Rota       | Descrição                                                   |
+| ---------- | ----------------------------------------------------------- |
+| `/healthz` | Liveness — processo vivo.                                   |
+| `/readyz`  | Readiness — pronto para tráfego (**não depende do Redis**). |
+| `/metrics` | Métricas Prometheus.                                        |
 
 O contrato completo está em [`api/openapi.yaml`](./api/openapi.yaml).
 
@@ -108,17 +109,17 @@ make generate     # atualiza internal/api/api.gen.go (handlers escritos à mão 
 
 ## Configuração (variáveis de ambiente)
 
-| Variável | Default | Descrição |
-| --- | --- | --- |
-| `PORT` | `8000` | Porta HTTP. |
-| `LOG_LEVEL` | `info` | `debug`/`info`/`warn`/`error`. |
-| `LOG_FORMAT` | `json` | `json` ou `text`. |
-| `CALC_DELAY` | `5s` | Delay simulado em cache miss. |
-| `CACHE_ENABLED` | `false` | Liga/desliga o cache. |
-| `CACHE_TTL` | `60s` | Expiração das entradas de cache. |
-| `REDIS_ADDR` | — | `host:port` do Redis (se cache habilitado). |
-| `REDIS_PASSWORD` | — | Senha do Redis (opcional). |
-| `REDIS_DB` | `0` | Índice do banco Redis. |
+| Variável         | Default | Descrição                                   |
+| ---------------- | ------- | ------------------------------------------- |
+| `PORT`           | `8000`  | Porta HTTP.                                 |
+| `LOG_LEVEL`      | `info`  | `debug`/`info`/`warn`/`error`.              |
+| `LOG_FORMAT`     | `json`  | `json` ou `text`.                           |
+| `CALC_DELAY`     | `5s`    | Delay simulado em cache miss.               |
+| `CACHE_ENABLED`  | `false` | Liga/desliga o cache.                       |
+| `CACHE_TTL`      | `60s`   | Expiração das entradas de cache.            |
+| `REDIS_ADDR`     | —       | `host:port` do Redis (se cache habilitado). |
+| `REDIS_PASSWORD` | —       | Senha do Redis (opcional).                  |
+| `REDIS_DB`       | `0`     | Índice do banco Redis.                      |
 
 Comportamento do cache na inicialização (degradação graciosa): se habilitado mas
 `REDIS_ADDR` faltar ou o Redis estiver inacessível, a aplicação **loga um erro e
