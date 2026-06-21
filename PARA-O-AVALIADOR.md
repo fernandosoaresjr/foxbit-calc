@@ -9,14 +9,16 @@ solução foi construída**, **as decisões de arquitetura/organização** e dá
 
 ## Sumário
 
-- [Visão geral da solução](#visão-geral-da-solução)
-- [1. Como usei o Claude Code](#1-como-usei-o-claude-code)
-- [2. Decisões de arquitetura e organização](#2-decisões-de-arquitetura-e-organização)
-- [3. Como testar de ponta a ponta (E2E)](#3-como-testar-de-ponta-a-ponta-e2e)
-  - [Caminho A — deploy direto no seu cluster (rápido)](#caminho-a--deploy-direto-no-seu-cluster-rápido)
-  - [Caminho B — GitOps completo via fork + pipeline](#caminho-b--gitops-completo-via-fork--pipeline)
-  - [Alterar a API e reimplantar](#alterar-a-api-e-reimplantar)
-  - [Remover a aplicação](#remover-a-aplicação)
+- [Para o(s) avaliador(es) — desafio de SRE da Foxbit](#para-os-avaliadores--desafio-de-sre-da-foxbit)
+  - [Sumário](#sumário)
+  - [Visão geral da solução](#visão-geral-da-solução)
+  - [1. Como usei o Claude Code](#1-como-usei-o-claude-code)
+  - [2. Decisões de arquitetura e organização](#2-decisões-de-arquitetura-e-organização)
+  - [3. Como testar de ponta a ponta (E2E)](#3-como-testar-de-ponta-a-ponta-e2e)
+    - [Caminho A — deploy direto no seu cluster (rápido)](#caminho-a--deploy-direto-no-seu-cluster-rápido)
+    - [Caminho B — GitOps completo via fork + pipeline](#caminho-b--gitops-completo-via-fork--pipeline)
+    - [Alterar a API e reimplantar](#alterar-a-api-e-reimplantar)
+    - [Remover a aplicação](#remover-a-aplicação)
 
 ## Visão geral da solução
 
@@ -216,7 +218,8 @@ Acompanhe em **Actions** de cada repo; o deploy loga rollout e o smoke test
 ### Alterar a API e reimplantar
 
 (Critério de avaliação.) Edite o contrato/código em `foxbit-calc`, rode
-`make generate && make test`, e faça push na `main` — o pipeline cuida do resto
+`make generate && make test`, faça push para uma nova branch e abra um PR.
+Após a aprovação e merge do PR na `main`, o pipeline cuida do resto
 (imagem nova → promoção → deploy). Manualmente, equivale a publicar uma imagem
 nova e `helm upgrade ... --set image.tag=<nova-tag>`.
 

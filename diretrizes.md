@@ -83,8 +83,7 @@ truncado. Divisão por zero retorna `400`.
   - Bloco de configuração com flag principal de habilitar/desabilitar.
   - **Redis interno** (via *subchart* oficial `bitnami/redis`, standalone, sem
     persistência, com exporter de métricas) **ou externo** (endereço + credenciais
-    via Secret). *(A diretriz inicial falava em "sidecar"; na prática um subchart
-    dedicado é mais idiomático que um container sidecar.)*
+    via Secret).
 - **`values.yaml` agnóstico** a ambiente/app, com seções comentadas (imagem,
   cache, monitoramento, recursos, segurança, probes, logging).
 - **Testes do chart** com `helm lint` e `helm unittest`.
@@ -119,8 +118,7 @@ CI/CD próprios:
   values/version e valida o schema com **kubeconform**. `CD`: **`helm upgrade
   --install`** no cluster, com verificação de rollout e *smoke test* dentro do
   cluster.
-- **Secret Scan** (gitleaks) em todo push/PR nos 3 repos. *(Incluído além das
-  diretrizes iniciais.)*
+- **Secret Scan** (gitleaks) em todo push/PR nos 3 repos.
 - **Documentação dos workflows** em `.github/workflows/README.md`, referenciada
   nos READMEs.
 
