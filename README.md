@@ -7,6 +7,10 @@ observabilidade (logs JSON + métricas Prometheus) e **CI/CD** com GitHub Action
 Solução do [desafio técnico de SRE](./teste-vaga-sre-foxbit.md). O deploy em
 Kubernetes vive em repositórios separados — ver [Repositórios relacionados](#repositórios-relacionados).
 
+> 📋 **Avaliador(a):** comece por **[`PARA-O-AVALIADOR.md`](./PARA-O-AVALIADOR.md)** —
+> visão geral, decisões de arquitetura e o roteiro de teste E2E. As diretrizes que
+> guiaram a solução estão em [`diretrizes.md`](./diretrizes.md).
+
 ## Índice
 
 - [Foxbit Calc](#foxbit-calc)
