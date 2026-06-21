@@ -93,7 +93,7 @@ O contrato completo está em [`api/openapi.yaml`](./api/openapi.yaml).
 
 ## Desenvolvimento local
 
-Pré-requisitos: **Go 1.22+** (e, opcionalmente, Docker).
+Pré-requisitos: **Go 1.24+** (e, opcionalmente, Docker).
 
 ```bash
 make run          # sobe em http://localhost:8000 (delay 5s, cache off)
