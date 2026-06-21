@@ -68,7 +68,14 @@ func observe(logger *slog.Logger, m *observability.Metrics) echo.MiddlewareFunc 
 			m.HTTPRequests.WithLabelValues(c.Request().Method, route, strconv.Itoa(status)).Inc()
 			m.HTTPDuration.WithLabelValues(c.Request().Method, route).Observe(elapsed.Seconds())
 
-			logger.Info("http request",
+			// Endpoints operacionais (probes/scrape) são consultados o tempo todo
+			// pelo Kubernetes/Prometheus; logamos em DEBUG para não poluir o log.
+			level := slog.LevelInfo
+			switch route {
+			case "/healthz", "/readyz", "/metrics":
+				level = slog.LevelDebug
+			}
+			logger.Log(c.Request().Context(), level, "http request",
 				"method", c.Request().Method,
 				"path", c.Request().URL.Path,
 				"route", route,
